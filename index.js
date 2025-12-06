@@ -16,8 +16,8 @@ admin.initializeApp({
 const db = admin.firestore();
 
 // Telegram Details
-const BOT_TOKEN = "8379481651:AAG61cqEsm-02n1qUkLvJgRSeEK7UEipk1s";
-const CHAT_ID = "7960347614";
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // Already notified orders tracking
 const notified = new Set();
@@ -64,3 +64,4 @@ db.collection("orders").onSnapshot(async (snapshot) => {
     }
   });
 });
+
