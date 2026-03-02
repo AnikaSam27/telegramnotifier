@@ -78,7 +78,7 @@ db.collection("productOrders").onSnapshot(async (snapshot) => {
       // Determine if we should notify
       const shouldNotify =
         (order.paymentMethod === "COD" && order.status === "PLACED") ||
-        (order.paymentMethod === "PREPAID" && order.paymentStatus === "PAID");
+        (order.paymentMethod === "ONLINE" && order.paymentStatus === "PAID");
 
       if (!shouldNotify) return;
       if (order.telegramNotified) return;
@@ -126,3 +126,4 @@ ${itemsText}
     }
   });
 });
+
