@@ -2,11 +2,8 @@ import admin from "firebase-admin";
 import fetch from "node-fetch";
 import fs from "fs";
 
-
 // Load Firebase service account key safely
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-
 
 // Initialize Firebase Admin
 admin.initializeApp({
@@ -21,6 +18,7 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // Already notified orders tracking
 const notified = new Set();
+const notifiedProducts = new Set(); // MOVE here, top level
 
 // Function to send telegram message
 async function sendTelegram(msg) {
@@ -37,8 +35,10 @@ async function sendTelegram(msg) {
   });
 }
 
-// Firestore Listener
-console.log("🔥 Order listener started...");
+// ============================
+// 🔔 SERVICE LISTENER
+// ============================
+console.log("🔥 Service Order listener started...");
 
 db.collection("orders").onSnapshot(async (snapshot) => {
   snapshot.docChanges().forEach(async (change) => {
@@ -60,27 +60,25 @@ db.collection("orders").onSnapshot(async (snapshot) => {
       `;
 
       await sendTelegram(message);
-      console.log("Sent Telegram Notification:", order.orderId);
+      console.log("Sent Service Telegram Notification:", order.orderId);
     }
   });
+});
 
-  // =======================================
-// 🛒 PRODUCT ORDER LISTENER
-// =======================================
-
-const notifiedProducts = new Set();
+// ============================
+// 🛒 PRODUCT LISTENER
+// ============================
+console.log("🔥 Product Order listener started...");
 
 db.collection("productOrders").onSnapshot(async (snapshot) => {
   snapshot.docChanges().forEach(async (change) => {
     if (change.type === "added" || change.type === "modified") {
-
       const order = { id: change.doc.id, ...change.doc.data() };
 
-      // 🔥 COD → trigger when status = PLACED
-      // 🔥 PREPAID → trigger when status = PAID
+      // Determine if we should notify
       const shouldNotify =
         (order.paymentMethod === "COD" && order.status === "PLACED") ||
-        (order.paymentMethod === "PREPAID" && order.status === "PAID");
+        (order.paymentMethod === "PREPAID" && order.paymentStatus === "PAID");
 
       if (!shouldNotify) return;
       if (order.telegramNotified) return;
@@ -94,10 +92,9 @@ db.collection("productOrders").onSnapshot(async (snapshot) => {
           : "🔥 *PREPAID ORDER*";
 
       let itemsText = "";
-
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach((item) => {
-          itemsText += `• ${item.name} x${item.quantity} = ₹${item.price * item.quantity}\n`;
+          itemsText += `• ${item.productName || item.name} x${item.quantity} = ₹${item.price * item.quantity}\n`;
         });
       }
 
@@ -107,32 +104,25 @@ db.collection("productOrders").onSnapshot(async (snapshot) => {
 ${paymentLabel}
 
 🧾 Order ID: ${order.orderId}
-👤 Name: ${order.customerName}
-📞 Phone: ${order.customerPhone}
+👤 User ID: ${order.userId}
+📞 Phone: ${order.customerPhone || "Not Provided"}
 📍 City: ${order.city}
-📮 Pincode: ${order.pincode}
+📮 Area: ${order.area || order.pincode || "N/A"}
 
 📦 Items:
 ${itemsText}
 
-💰 Total: ₹${order.totalAmount}
+💰 Total: ₹${order.total}
 💳 Payment Mode: ${order.paymentMethod}
-🕒 Time: ${order.date}
+🕒 Time: ${new Date(order.timestamp).toLocaleString()}
 `;
 
       await sendTelegram(message);
 
-      // Prevent duplicate notifications permanently
-      await change.doc.ref.update({
-        telegramNotified: true,
-      });
+      // Mark as notified
+      await change.doc.ref.update({ telegramNotified: true });
 
       console.log("Sent Product Telegram Notification:", order.orderId);
     }
   });
-
-
-  
 });
-
-
