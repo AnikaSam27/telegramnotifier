@@ -63,5 +63,76 @@ db.collection("orders").onSnapshot(async (snapshot) => {
       console.log("Sent Telegram Notification:", order.orderId);
     }
   });
+
+  // =======================================
+// 🛒 PRODUCT ORDER LISTENER
+// =======================================
+
+const notifiedProducts = new Set();
+
+db.collection("productOrders").onSnapshot(async (snapshot) => {
+  snapshot.docChanges().forEach(async (change) => {
+    if (change.type === "added" || change.type === "modified") {
+
+      const order = { id: change.doc.id, ...change.doc.data() };
+
+      // 🔥 COD → trigger when status = PLACED
+      // 🔥 PREPAID → trigger when status = PAID
+      const shouldNotify =
+        (order.paymentMethod === "COD" && order.status === "PLACED") ||
+        (order.paymentMethod === "PREPAID" && order.status === "PAID");
+
+      if (!shouldNotify) return;
+      if (order.telegramNotified) return;
+      if (notifiedProducts.has(order.id)) return;
+
+      notifiedProducts.add(order.id);
+
+      let paymentLabel =
+        order.paymentMethod === "COD"
+          ? "💵 *COD ORDER*"
+          : "🔥 *PREPAID ORDER*";
+
+      let itemsText = "";
+
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach((item) => {
+          itemsText += `• ${item.name} x${item.quantity} = ₹${item.price * item.quantity}\n`;
+        });
+      }
+
+      const message = `
+🛒 *New Product Order!*
+
+${paymentLabel}
+
+🧾 Order ID: ${order.orderId}
+👤 Name: ${order.customerName}
+📞 Phone: ${order.customerPhone}
+📍 City: ${order.city}
+📮 Pincode: ${order.pincode}
+
+📦 Items:
+${itemsText}
+
+💰 Total: ₹${order.totalAmount}
+💳 Payment Mode: ${order.paymentMethod}
+🕒 Time: ${order.date}
+`;
+
+      await sendTelegram(message);
+
+      // Prevent duplicate notifications permanently
+      await change.doc.ref.update({
+        telegramNotified: true,
+      });
+
+      console.log("Sent Product Telegram Notification:", order.orderId);
+    }
+  });
+
+
+  
 });
+
 
